@@ -1,13 +1,36 @@
-const state = { plantillas: [] };         
+const state = { plantillas: [], editandoId: null, filtro: "" };   
 
 const lista = document.getElementById("listaPlantillas");
 const form = document.getElementById("form-plantilla");
 const selector = document.getElementById("selector");
 const salida = document.getElementById("mensaje-final");
+const btnCancelar = document.getElementById("btn-cancelar");
 
 function agregarPlantilla(titulo, mensaje, hashtag) {
   const nueva = new Template(titulo, mensaje, hashtag);
-  state.plantillas.push(nueva);  
+  state.plantillas.push(nueva);   
+}
+
+function eliminarPlantilla(id) {
+  const confirmado = confirm("¿Seguro que quieres eliminar esta plantilla?");  
+  if (!confirmado) return;
+  state.plantillas = state.plantillas.filter(plantilla => plantilla.id !== id);  
+  render();
+}
+
+function cargarEnFormulario(id) {
+  const plantilla = state.plantillas.find(plantilla => plantilla.id === id);
+  titulo.value = plantilla.titulo;
+  mensaje.value = plantilla.mensaje;
+  hashtag.value = plantilla.hashtag;
+  state.editandoId = id;              
+  btnCancelar.classList.remove("hidden");
+}
+
+function cancelarEdicion() {          
+  form.reset();
+  state.editandoId = null;
+  btnCancelar.classList.add("hidden");
 }
 
 function normalizarHashtag(texto) {
@@ -21,14 +44,61 @@ function generarMensajeFinal(plantilla, valorNombre, valorProducto) {
     .replaceAll("{producto}", valorProducto);
 }
 
+function contarPorHashtag(plantillas) {
+  const conteo = {};                              
+  plantillas.forEach(function (plantilla) {
+    const elHashtag = plantilla.hashtag;
+    if (conteo[elHashtag]) {
+      conteo[elHashtag] = conteo[elHashtag] + 1;  
+    } else {
+      conteo[elHashtag] = 1;                      
+    }
+  });
+  return conteo;
+}
+
+function hashtagMasUsado(porTag) {    
+  const entradas = Object.entries(porTag);
+  if (entradas.length === 0) return null;
+  return entradas.reduce((max, actual) => (actual[1] > max[1] ? actual : max));
+}
+
+function renderStats() {
+  const total = state.plantillas.length;
+  const porTag = contarPorHashtag(state.plantillas);
+  const etiquetas = Object.entries(porTag)
+    .map(([hashtag, cantidad]) =>
+      `<span class="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full">${hashtag} · ${cantidad}</span>`)
+    .join("");
+
+  const top = hashtagMasUsado(porTag);
+  const topTexto = top
+    ? `<p class="text-xs text-slate-500 mt-1">🏆 Más usado: <strong>${top[0]}</strong> (${top[1]})</p>`
+    : "";
+
+  document.getElementById("panel-stats").innerHTML = `
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-sm font-semibold text-slate-700">${total} plantilla(s)</span>
+      ${etiquetas}
+    </div>
+    ${topTexto}`;
+}
+
+function plantillasVisibles() {
+  const filtroTexto = (state.filtro ?? "").toLowerCase();
+  if (filtroTexto === "") return state.plantillas;
+  return state.plantillas.filter(plantilla => plantilla.hashtag.toLowerCase().includes(filtroTexto));
+}
+
 function render() {
-  lista.innerHTML = "";                      
-  state.plantillas.forEach(function (plantilla) {
-    const fechaTexto = plantilla.fecha.toLocaleDateString("es-PE");  
-    const totalCaracteres = plantilla.mensaje.length;                 
+  lista.innerHTML = "";                       
+  plantillasVisibles().forEach(function (plantilla) {
+    const fechaTexto = plantilla.fecha.toLocaleDateString("es-PE");   
+    const totalCaracteres = plantilla.mensaje.length;                
     const mensajeCorto = plantilla.mensaje.length > 60
-      ? plantilla.mensaje.slice(0, 60) + "…"                       
+      ? plantilla.mensaje.slice(0, 60) + "…"                         
       : plantilla.mensaje;
+
     const li = document.createElement("li");
     li.className = "bg-white p-4 rounded-lg shadow";
     li.innerHTML = `
@@ -40,14 +110,20 @@ function render() {
       <div class="flex items-center justify-between mt-2">
         <span class="inline-block text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">${plantilla.hashtag}</span>
         <span class="text-xs text-slate-400">${totalCaracteres} caracteres</span>
+      </div>
+      <div class="flex gap-2 mt-3 pt-2 border-t border-slate-100">
+        <button class="btn-editar text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 transition" data-id="${plantilla.id}">Editar</button>
+        <button class="btn-eliminar text-xs px-2.5 py-1 rounded-md bg-red-50 text-red-600 hover:bg-red-100 transition" data-id="${plantilla.id}">Eliminar</button>
       </div>`;
     lista.appendChild(li);                    
   });
+  renderStats();     
+  renderSelector();    
 }
 
 function renderSelector() {
   selector.innerHTML = state.plantillas
-    .map((plantilla, indice) => `<option value="${indice}">${plantilla.titulo}</option>`)   
+    .map((plantilla, indice) => `<option value="${indice}">${plantilla.titulo}</option>`) 
     .join("");
 }
 
@@ -56,14 +132,38 @@ form.addEventListener("submit", function (evento) {
   const tituloTexto = titulo.value.trim();
   const mensajeTexto = mensaje.value.trim();
 
-  if (tituloTexto.length === 0 || mensajeTexto.length === 0) {            
+  if (tituloTexto.length === 0 || mensajeTexto.length === 0) {              
     alert("Título y mensaje son obligatorios");
     return;
   }
-  agregarPlantilla(tituloTexto, mensajeTexto, normalizarHashtag(hashtag.value));
-  render();           
-  renderSelector();   
+
+  if (state.editandoId) {
+    state.plantillas = state.plantillas.map(plantilla =>   
+      plantilla.id === state.editandoId
+        ? { ...plantilla, titulo: tituloTexto, mensaje: mensajeTexto, hashtag: normalizarHashtag(hashtag.value) }
+        : plantilla
+    );
+    state.editandoId = null;
+    btnCancelar.classList.add("hidden");
+  } else {
+    agregarPlantilla(tituloTexto, mensajeTexto, normalizarHashtag(hashtag.value));
+  }
+
+  render();
   form.reset();
+});
+
+btnCancelar.addEventListener("click", cancelarEdicion);
+
+lista.addEventListener("click", function (evento) {
+  const id = evento.target.dataset.id;
+  if (evento.target.classList.contains("btn-eliminar")) eliminarPlantilla(id);
+  if (evento.target.classList.contains("btn-editar"))   cargarEnFormulario(id);
+});
+
+document.getElementById("buscador").addEventListener("input", function (evento) {
+  state.filtro = evento.target.value;  
+  render();                            
 });
 
 document.getElementById("btn-generar").addEventListener("click", function () {
