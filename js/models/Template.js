@@ -5,5 +5,6 @@ class Template {
     this.mensaje = mensaje;
     this.hashtag = hashtag;
     this.fecha = new Date();
+    this.editadaEl = null;  
   }
 }

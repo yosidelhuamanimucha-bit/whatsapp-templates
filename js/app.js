@@ -1,14 +1,15 @@
-const state = { plantillas: [], editandoId: null, filtro: "" };   
+const state = { plantillas: [], editandoId: null, filtro: "" };  
 
 const lista = document.getElementById("listaPlantillas");
 const form = document.getElementById("form-plantilla");
 const selector = document.getElementById("selector");
 const salida = document.getElementById("mensaje-final");
 const btnCancelar = document.getElementById("btn-cancelar");
+const buscador = document.getElementById("buscador");
 
 function agregarPlantilla(titulo, mensaje, hashtag) {
   const nueva = new Template(titulo, mensaje, hashtag);
-  state.plantillas.push(nueva);   
+  state.plantillas.push(nueva);  
 }
 
 function eliminarPlantilla(id) {
@@ -23,11 +24,11 @@ function cargarEnFormulario(id) {
   titulo.value = plantilla.titulo;
   mensaje.value = plantilla.mensaje;
   hashtag.value = plantilla.hashtag;
-  state.editandoId = id;              
+  state.editandoId = id;             
   btnCancelar.classList.remove("hidden");
 }
 
-function cancelarEdicion() {          
+function cancelarEdicion() {
   form.reset();
   state.editandoId = null;
   btnCancelar.classList.add("hidden");
@@ -45,19 +46,19 @@ function generarMensajeFinal(plantilla, valorNombre, valorProducto) {
 }
 
 function contarPorHashtag(plantillas) {
-  const conteo = {};                              
+  const conteo = {};                             
   plantillas.forEach(function (plantilla) {
     const elHashtag = plantilla.hashtag;
     if (conteo[elHashtag]) {
       conteo[elHashtag] = conteo[elHashtag] + 1;  
     } else {
-      conteo[elHashtag] = 1;                      
+      conteo[elHashtag] = 1;                     
     }
   });
   return conteo;
 }
 
-function hashtagMasUsado(porTag) {    
+function hashtagMasUsado(porTag) {
   const entradas = Object.entries(porTag);
   if (entradas.length === 0) return null;
   return entradas.reduce((max, actual) => (actual[1] > max[1] ? actual : max));
@@ -81,7 +82,8 @@ function renderStats() {
       <span class="text-sm font-semibold text-slate-700">${total} plantilla(s)</span>
       ${etiquetas}
     </div>
-    ${topTexto}`;
+    ${topTexto}
+    <p class="text-xs text-slate-400 mt-1">📂 App abierta ${state.vecesAbierta} vez(veces)</p>`;
 }
 
 function plantillasVisibles() {
@@ -93,11 +95,14 @@ function plantillasVisibles() {
 function render() {
   lista.innerHTML = "";                       
   plantillasVisibles().forEach(function (plantilla) {
-    const fechaTexto = plantilla.fecha.toLocaleDateString("es-PE");   
-    const totalCaracteres = plantilla.mensaje.length;                
+    const fechaTexto = new Date(plantilla.fecha).toLocaleDateString("es-PE");  
+    const totalCaracteres = plantilla.mensaje.length;
     const mensajeCorto = plantilla.mensaje.length > 60
-      ? plantilla.mensaje.slice(0, 60) + "…"                         
+      ? plantilla.mensaje.slice(0, 60) + "…"
       : plantilla.mensaje;
+    const edicionTexto = plantilla.editadaEl                                    
+      ? `<p class="text-[11px] text-slate-400 mt-1">✏️ editado ${new Date(plantilla.editadaEl).toLocaleDateString("es-PE")}</p>`
+      : "";
 
     const li = document.createElement("li");
     li.className = "bg-white p-4 rounded-lg shadow";
@@ -107,6 +112,7 @@ function render() {
         <span class="text-xs text-slate-400 shrink-0">${fechaTexto}</span>
       </div>
       <p class="text-sm text-slate-600 mt-1">${mensajeCorto}</p>
+      ${edicionTexto}
       <div class="flex items-center justify-between mt-2">
         <span class="inline-block text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">${plantilla.hashtag}</span>
         <span class="text-xs text-slate-400">${totalCaracteres} caracteres</span>
@@ -117,13 +123,14 @@ function render() {
       </div>`;
     lista.appendChild(li);                    
   });
-  renderStats();     
-  renderSelector();    
+  renderStats();
+  renderSelector();
+  guardar();          
 }
 
 function renderSelector() {
   selector.innerHTML = state.plantillas
-    .map((plantilla, indice) => `<option value="${indice}">${plantilla.titulo}</option>`) 
+    .map((plantilla, indice) => `<option value="${indice}">${plantilla.titulo}</option>`)
     .join("");
 }
 
@@ -132,15 +139,21 @@ form.addEventListener("submit", function (evento) {
   const tituloTexto = titulo.value.trim();
   const mensajeTexto = mensaje.value.trim();
 
-  if (tituloTexto.length === 0 || mensajeTexto.length === 0) {              
+  if (tituloTexto.length === 0 || mensajeTexto.length === 0) {             
     alert("Título y mensaje son obligatorios");
     return;
   }
 
   if (state.editandoId) {
-    state.plantillas = state.plantillas.map(plantilla =>   
+    state.plantillas = state.plantillas.map(plantilla =>    
       plantilla.id === state.editandoId
-        ? { ...plantilla, titulo: tituloTexto, mensaje: mensajeTexto, hashtag: normalizarHashtag(hashtag.value) }
+        ? {
+            ...plantilla,
+            titulo: tituloTexto,
+            mensaje: mensajeTexto,
+            hashtag: normalizarHashtag(hashtag.value),
+            editadaEl: new Date()        
+          }
         : plantilla
     );
     state.editandoId = null;
@@ -161,17 +174,24 @@ lista.addEventListener("click", function (evento) {
   if (evento.target.classList.contains("btn-editar"))   cargarEnFormulario(id);
 });
 
-document.getElementById("buscador").addEventListener("input", function (evento) {
+buscador.addEventListener("input", function (evento) {
   state.filtro = evento.target.value;  
-  render();                            
+  render();                         
 });
+
+document.getElementById("btn-vaciar").addEventListener("click", function () {
+  state.plantillas = [];
+  render();    
+});
+
+document.getElementById("btn-exportar").addEventListener("click", exportarAConsola);
 
 document.getElementById("btn-generar").addEventListener("click", function () {
   if (state.plantillas.length === 0) {
     alert("Primero agrega al menos una plantilla");
     return;
   }
-  const plantilla = state.plantillas[Number(selector.value)];  
+  const plantilla = state.plantillas[Number(selector.value)];
   const nombre = document.getElementById("valorNombre").value.trim();
   const producto = document.getElementById("valorProducto").value.trim();
   salida.textContent = generarMensajeFinal(plantilla, nombre, producto);
@@ -180,3 +200,9 @@ document.getElementById("btn-generar").addEventListener("click", function () {
 document.getElementById("btn-copiar").addEventListener("click", function () {
   navigator.clipboard.writeText(salida.textContent);
 });
+
+state.plantillas = cargar();                                  
+state.filtro = localStorage.getItem(CLAVE_FILTRO) ?? "";        
+buscador.value = state.filtro;                                 
+state.vecesAbierta = incrementarContadorAperturas();           
+render();
